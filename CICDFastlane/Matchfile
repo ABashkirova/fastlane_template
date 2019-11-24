@@ -1,0 +1,8 @@
+git_url("git@your.repository/certificates.git")
+
+type("appstore")
+app_identifier([ENV['APP_BUNDLE_IDENTIFIER']])
+
+git_branch(ENV['TEAM_ID'])
+
+team_id(ENV['TEAM_ID'])

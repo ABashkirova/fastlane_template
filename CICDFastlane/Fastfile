@@ -1,0 +1,139 @@
+default_platform(:ios)
+
+platform :ios do
+  #CONSTANTS
+  OUTPUT_BUILD = "./build"
+  OUTPUT_LOG = "./tmp"
+  OUTPUT_REPORTS = "build/reports"
+
+  before_all do
+    unlock
+  end
+
+  desc "Build stage"
+  lane :build do
+    match_not_force
+    prepare_build
+    gym(
+      scheme: ENV['APPLICATION_SCHEME_NAME'],
+      export_team_id: ENV['TEAM_ID'],
+      clean: true,
+      buildlog_path: OUTPUT_LOG,
+      output_name: ENV['OUTPUT_IPA_NAME'],
+      derived_data_path: OUTPUT_BUILD,
+      xcpretty_report_junit: "#{OUTPUT_REPORTS}/build_report.junit",
+      configuration: "Release",
+    )
+  end
+
+  desc "Prepare build stage: carthage and cocoapods"
+  lane :prepare_build do
+    pathCartfile = ""
+    Dir.chdir("..") do
+      pathCartfile = File.join(Dir.pwd, "/Cartfile")
+    end
+    if File.exist?(pathCartfile)
+      carthage(
+        command: "update",
+        use_binaries: false,
+        platform: "ios",
+        cache_builds: true
+      )
+    end
+    pathPodfile = ""
+    Dir.chdir("..") do
+      pathPodfile = File.join(Dir.pwd, "/Podfile")
+    end
+    if File.exist?(pathPodfile)
+      cocoapods(
+        podfile: "./Podfile",
+        use_bundle_exec: false,
+        repo_update: true
+      )
+    end
+  end
+
+
+  desc "Test stage"
+  lane :test do
+    scan(
+      workspace: ENV['APPLICATION_WORKSPACE_NAME'],
+      devices: ["iPhone SE"],
+      scheme: ENV['APPLICATION_SCHEME_NAME'],
+      clean: true,
+      code_coverage: true,
+      derived_data_path: OUTPUT_BUILD,
+      output_directory: OUTPUT_REPORTS,
+      output_types: "junit"
+    )
+    coverage
+  end
+
+  lane :coverage do
+    xcov(
+      workspace: ENV['APPLICATION_WORKSPACE_NAME'], 
+      scheme: ENV['APPLICATION_SCHEME_NAME'],
+      include_targets: "#{ENV['APPLICATION_SCHEME_NAME']}.app", 
+      html_report: false,
+      derived_data_path: OUTPUT_BUILD
+    )
+    slather(
+      scheme: ENV['APPLICATION_SCHEME_NAME'],
+      proj: ENV['APPLICATION_PROJECT_NAME'],
+      workspace: ENV['APPLICATION_WORKSPACE_NAME'],
+      cobertura_xml: true,
+      html: false,
+      build_directory: OUTPUT_BUILD,
+      output_directory: OUTPUT_REPORTS
+    )
+  end
+  
+  desc "Sonar stage (after run test!)"
+  lane :run_sonar do
+    lizard(
+      source_folder: "#{ENV['APPLICATION_SCHEME_NAME']}/", 
+      language: "swift", 
+      export_type: "xml", 
+      report_file: "sonar-reports/lizard-report.xml"
+    )
+    swiftlint(
+      output_file: "sonar-reports/#{ENV['APPLICATION_SCHEME_NAME']}-swiftlint.txt", 
+      ignore_exit_status: true
+    )
+    sonar
+  end
+  
+  desc "Deploy to testflight stage"
+  lane :deploy do
+    pilot(
+      username: ENV['APPLE_ID'],
+      app_identifier: ENV['APP_BUNDLE_IDENTIFIER'],
+      dev_portal_team_id: ENV['TEAM_ID'],
+      team_id: ENV['FASTLANE_ITC_TEAM_ID'],
+      app_platform: "ios",
+      ipa: ENV['OUTPUT_IPA_NAME'],
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  lane :match_force do
+    match(
+      force: true,
+      verbose: true
+    )
+  end
+
+  lane :match_not_force do
+    match(
+      verbose: true
+    )
+  end
+  
+  desc "Unlock keychain"
+  private_lane :unlock do
+    pass = ENV['KEYCHAIN_PASSWORD']
+    unlock_keychain(
+      password: pass
+    )
+  end
+end

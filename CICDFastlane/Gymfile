@@ -1,0 +1,8 @@
+scheme(ENV['APPLICATION_SCHEME_NAME'])
+
+export_options = {
+  teamID: ENV['TEAM_ID'],
+  method: "app-store",
+  signingCertificate: "iPhone Distribution",
+  provisioningProfiles: "#{ENV['EXPORT_MAPKEY']}"
+}
